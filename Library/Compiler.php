@@ -1973,9 +1973,12 @@ class Compiler
         /**
          * project.c
          */
-        $content = file_get_contents($templatePath . '/project.c');
+
+        $projectTemplate = $this->getConfig()->get('zendExtension') ? 'zend_project' : 'project';
+
+        $content = file_get_contents($templatePath . "/{$projectTemplate}.c");
         if (empty($content)) {
-            throw new Exception("Template project.c doesn't exist");
+            throw new Exception("Template {$projectTemplate}.c doesn't exist");
         }
 
         $includes = '';
@@ -2150,9 +2153,9 @@ class Compiler
         /**
          * Round 6. Generate the project main header
          */
-        $content = file_get_contents($templatePath . '/project.h');
+        $content = file_get_contents($templatePath . "/{$projectTemplate}.h");
         if (empty($content)) {
-            throw new Exception("Template project.h doesn't exists");
+            throw new Exception("Template {$projectTemplate}.h doesn't exists");
         }
 
         $includeHeaders = array();
