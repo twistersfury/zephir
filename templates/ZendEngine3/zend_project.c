@@ -21,6 +21,12 @@
 #include "kernel/fcall.h"
 #include "kernel/memory.h"
 
+/* Includes For Zend_Extension */
+    #include "php_ini.h"
+    #include "zend.h"
+    #include "zend_extensions.h"
+/* End Includes */
+
 %EXTRA_INCLUDES%
 
 %CLASS_ENTRIES%
@@ -162,3 +168,87 @@ zend_module_entry %PROJECT_LOWER_SAFE%_module_entry = {
 #ifdef COMPILE_DL_%PROJECT_UPPER%
 ZEND_GET_MODULE(%PROJECT_LOWER_SAFE%)
 #endif
+
+/* Zend_Extension Stuff */
+
+int %PROJECT_LOWER%_zend_startup(zend_extension *extension)
+{
+	TSRMLS_FETCH();
+    CG(compiler_options) = CG(compiler_options) | ZEND_COMPILE_EXTENDED_INFO;
+	return SUCCESS;
+}
+
+void %PROJECT_LOWER%_zend_shutdown(zend_extension *extension)
+{
+
+}
+
+void %PROJECT_LOWER%_activate()
+{
+
+}
+
+void %PROJECT_LOWER%_deactivate()
+{
+
+}
+
+void %PROJECT_LOWER%_message_handler(int message, void *arg)
+{
+
+}
+
+void %PROJECT_LOWER%_op_array_handler(zend_op_array *op_array)
+{
+
+}
+
+void %PROJECT_LOWER%_statement_handler(zend_op_array *op_array)
+{
+
+}
+
+void %PROJECT_LOWER%_fcall_begin_handler(zend_op_array *op_array)
+{
+
+}
+
+void %PROJECT_LOWER%_fcall_end_handler(zend_op_array *op_array)
+{
+
+}
+
+void %PROJECT_LOWER%_op_array_ctor(zend_op_array *op_array)
+{
+
+}
+
+void %PROJECT_LOWER%_op_array_dtor(zend_op_array *op_array)
+{
+
+}
+
+#ifndef ZEND_EXT_API
+#define ZEND_EXT_API    ZEND_DLEXPORT
+#endif
+ZEND_EXTENSION();
+
+ZEND_DLEXPORT zend_extension zend_extension_entry = {
+	PHP_%PROJECT_UPPER%_NAME,
+    PHP_%PROJECT_UPPER%_VERSION,
+	PHP_%PROJECT_UPPER%_AUTHOR,
+	PHP_%PROJECT_UPPER%_WEBSITE,
+	PHP_%PROJECT_UPPER%_COPYRIGHT,
+	%PROJECT_LOWER%_zend_startup,
+	%PROJECT_LOWER%_zend_shutdown,
+    %PROJECT_LOWER%_activate,             /* activate_func_t */
+    %PROJECT_LOWER%_deactivate,           /* deactivate_func_t */
+    %PROJECT_LOWER%_message_handler,      /* message_handler_func_t */
+    %PROJECT_LOWER%_op_array_handler,     /* op_array_handler_func_t */
+	%PROJECT_LOWER%_statement_handler,    /* statement_handler_func_t */
+    %PROJECT_LOWER%_fcall_begin_handler,  /* fcall_begin_handler_func_t */
+    %PROJECT_LOWER%_fcall_end_handler,    /* fcall_end_handler_func_t */
+    %PROJECT_LOWER%_op_array_ctor,        /* op_array_ctor_func_t */
+    %PROJECT_LOWER%_op_array_dtor,        /* op_array_dtor_func_t */
+	STANDARD_ZEND_EXTENSION_PROPERTIES
+};
