@@ -171,59 +171,59 @@ ZEND_GET_MODULE(%PROJECT_LOWER_SAFE%)
 
 /* Zend_Extension Stuff */
 
-int %PROJECT_LOWER%_zend_startup(zend_extension *extension)
+int %PROJECT_LOWER_SAFE%_zend_startup(zend_extension *extension)
 {
 	TSRMLS_FETCH();
     CG(compiler_options) = CG(compiler_options) | ZEND_COMPILE_EXTENDED_INFO;
 	return SUCCESS;
 }
 
-void %PROJECT_LOWER%_zend_shutdown(zend_extension *extension)
+void %PROJECT_LOWER_SAFE%_zend_shutdown(zend_extension *extension)
 {
 
 }
 
-void %PROJECT_LOWER%_activate()
+void %PROJECT_LOWER_SAFE%_activate()
 {
 
 }
 
-void %PROJECT_LOWER%_deactivate()
+void %PROJECT_LOWER_SAFE%_deactivate()
 {
 
 }
 
-void %PROJECT_LOWER%_message_handler(int message, void *arg)
+void %PROJECT_LOWER_SAFE%_message_handler(int message, void *arg)
 {
 
 }
 
-void %PROJECT_LOWER%_op_array_handler(zend_op_array *op_array)
+void %PROJECT_LOWER_SAFE%_op_array_handler(zend_op_array *op_array)
 {
 
 }
 
-void %PROJECT_LOWER%_statement_handler(zend_op_array *op_array)
+void %PROJECT_LOWER_SAFE%_statement_handler(zend_op_array *op_array)
 {
 
 }
 
-void %PROJECT_LOWER%_fcall_begin_handler(zend_op_array *op_array)
+void %PROJECT_LOWER_SAFE%_fcall_begin_handler(zend_op_array *op_array)
 {
 
 }
 
-void %PROJECT_LOWER%_fcall_end_handler(zend_op_array *op_array)
+void %PROJECT_LOWER_SAFE%_fcall_end_handler(zend_op_array *op_array)
 {
 
 }
 
-void %PROJECT_LOWER%_op_array_ctor(zend_op_array *op_array)
+void %PROJECT_LOWER_SAFE%_op_array_ctor(zend_op_array *op_array)
 {
 
 }
 
-void %PROJECT_LOWER%_op_array_dtor(zend_op_array *op_array)
+void %PROJECT_LOWER_SAFE%_op_array_dtor(zend_op_array *op_array)
 {
 
 }
@@ -239,16 +239,16 @@ ZEND_DLEXPORT zend_extension zend_extension_entry = {
 	PHP_%PROJECT_UPPER%_AUTHOR,
 	PHP_%PROJECT_UPPER%_WEBSITE,
 	PHP_%PROJECT_UPPER%_COPYRIGHT,
-	%PROJECT_LOWER%_zend_startup,
-	%PROJECT_LOWER%_zend_shutdown,
-    %PROJECT_LOWER%_activate,             /* activate_func_t */
-    %PROJECT_LOWER%_deactivate,           /* deactivate_func_t */
-    %PROJECT_LOWER%_message_handler,      /* message_handler_func_t */
-    %PROJECT_LOWER%_op_array_handler,     /* op_array_handler_func_t */
-	%PROJECT_LOWER%_statement_handler,    /* statement_handler_func_t */
-    %PROJECT_LOWER%_fcall_begin_handler,  /* fcall_begin_handler_func_t */
-    %PROJECT_LOWER%_fcall_end_handler,    /* fcall_end_handler_func_t */
-    %PROJECT_LOWER%_op_array_ctor,        /* op_array_ctor_func_t */
-    %PROJECT_LOWER%_op_array_dtor,        /* op_array_dtor_func_t */
+	%PROJECT_LOWER_SAFE%_zend_startup,
+	%PROJECT_LOWER_SAFE%_zend_shutdown,
+    %PROJECT_LOWER_SAFE%_activate,             /* activate_func_t */
+    %PROJECT_LOWER_SAFE%_deactivate,           /* deactivate_func_t */
+    %PROJECT_LOWER_SAFE%_message_handler,      /* message_handler_func_t */
+    %PROJECT_LOWER_SAFE%_op_array_handler,     /* op_array_handler_func_t */
+	%PROJECT_LOWER_SAFE%_statement_handler,    /* statement_handler_func_t */
+    %PROJECT_LOWER_SAFE%_fcall_begin_handler,  /* fcall_begin_handler_func_t */
+    %PROJECT_LOWER_SAFE%_fcall_end_handler,    /* fcall_end_handler_func_t */
+    %PROJECT_LOWER_SAFE%_op_array_ctor,        /* op_array_ctor_func_t */
+    %PROJECT_LOWER_SAFE%_op_array_dtor,        /* op_array_dtor_func_t */
 	STANDARD_ZEND_EXTENSION_PROPERTIES
 };
