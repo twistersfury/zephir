@@ -2211,6 +2211,7 @@ class Compiler
             '%PROJECT_VERSION%'          => utf8_decode($this->config->get('version')),
             '%PROJECT_DESCRIPTION%'      => utf8_decode($this->config->get('description')),
             '%PROJECT_ZEPVERSION%'       => $version,
+            '%PROJECT_COPYRIGHT%'        => utf8_decode($this->config->get('copyright')),
             '%EXTENSION_GLOBALS%'        => $globalCode,
             '%EXTENSION_STRUCT_GLOBALS%' => $globalStruct
         );
