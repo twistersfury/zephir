@@ -175,7 +175,55 @@ int %PROJECT_LOWER_SAFE%_zend_startup(zend_extension *extension)
 {
 	TSRMLS_FETCH();
     CG(compiler_options) = CG(compiler_options) | ZEND_COMPILE_EXTENDED_INFO;
-	return SUCCESS;
+    zend_startup_module(&%PROJECT_LOWER_SAFE%_module_entry);
+
+//    zval myResponse;
+//    int ZEPHIR_LAST_CALL_STATUS;
+////    ZEPHIR_INIT_THIS();
+//
+//    ZVAL_UNDEF(&myResponse);
+//
+//    ZEPHIR_MM_GROW();
+//
+//    ZEPHIR_INIT_VAR(&myResponse);
+//    object_init_ex(&myResponse, %ZEND_CLASS%);
+////    if (zephir_has_constructor(&myResponse TSRMLS_CC)) {
+////        ZEPHIR_CALL_METHOD(NULL, &myResponse, "__construct", NULL, 0);
+////        zephir_check_call_status();
+////    }
+//    ZEPHIR_CALL_METHOD(NULL, &myResponse, "say", NULL, 1);
+//
+//    bool isSuccess = true;
+//
+//    do {
+//        if (ZEPHIR_LAST_CALL_STATUS == FAILURE) {
+//            ZEPHIR_MM_RESTORE();
+//            isSuccess = false;
+//        }
+//    } while(0);
+//
+//    fprintf(stderr, "here-also");
+
+//	return isSuccess;
+
+//    int ZEPHIR_LAST_CALL_STATUS;
+//	zephir_fcall_cache_entry *_0 = NULL;
+//
+//	ZEPHIR_MM_GROW();
+//
+//	ZEPHIR_CALL_CE_STATIC(NULL, %ZEND_CLASS%, "say", &_0, 1);
+//	//zephir_check_call_status();
+//
+//    do {
+//        if (ZEPHIR_LAST_CALL_STATUS == FAILURE) {
+//            ZEPHIR_MM_RESTORE();
+//            isSuccess = false;
+//        }
+//    } while(0);
+//
+//	ZEPHIR_MM_RESTORE();
+//
+    return SUCCESS;
 }
 
 void %PROJECT_LOWER_SAFE%_zend_shutdown(zend_extension *extension)
