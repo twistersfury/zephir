@@ -2138,7 +2138,8 @@ class Compiler
             ),
             '%FE_HEADER%'           => $feHeader,
             '%FE_ENTRIES%'          => $feEntries,
-            '%PROJECT_INI_ENTRIES%' => implode(PHP_EOL . "\t", $initEntries)
+            '%PROJECT_INI_ENTRIES%' => implode(PHP_EOL . "\t", $initEntries),
+            '%ZEND_CLASS%'           => $this->config->get('zendExtension')
         );
         foreach ($toReplace as $mark => $replace) {
             $content = str_replace($mark, $replace, $content);
