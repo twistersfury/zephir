@@ -12,10 +12,10 @@
 #include <Zend/zend_interfaces.h>
 
 #include "kernel/main.h"
-#include "kernel/object.h"
 #include "kernel/memory.h"
 #include "kernel/fcall.h"
 #include "kernel/operators.h"
+#include "kernel/object.h"
 
 
 ZEPHIR_INIT_CLASS(Stub_Functional)
@@ -44,7 +44,13 @@ PHP_METHOD(Stub_Functional, map1)
 	zephir_get_arrval(&a, a_param);
 	ZEPHIR_INIT_VAR(&_0);
 	ZEPHIR_INIT_NVAR(&_0);
-	zephir_create_closure_ex(&_0, NULL, stub_11__closure_ce, SL("__invoke"));
+		ZEPHIR_INIT_NVAR(&_0);
+		object_init_ex(&_0, stub_11__closure_ce);
+		if (zephir_has_constructor(&_0)) {
+			ZEPHIR_CALL_METHOD(NULL, &_0, "__construct", NULL, 0);
+			zephir_check_call_status();
+		}
+
 	ZEPHIR_CALL_FUNCTION(&_1, "array_map", NULL, 8, &_0, &a);
 	zephir_check_call_status();
 	RETURN_CCTOR(&_1);

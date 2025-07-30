@@ -160,7 +160,7 @@ class Closure
         //Only Compile Them If They Exist
         if (count($useVariables)) {
             $classDefinition->addMethod($this->buildConstructor($classDefinition, $expression['use']));
-            $this->compileVariables($compilationContext, $symbolVariable, $useVariables);
+//            $this->compileVariables($compilationContext, $symbolVariable, $useVariables);
         }
 
         ++self::$id;
