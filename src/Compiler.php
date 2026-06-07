@@ -1567,6 +1567,22 @@ final class Compiler
             $candidates[] = $lowercased;
         }
 
+        // Hybrid casing: lowercase only the top-level namespace directory,
+        // preserving the casing of the remaining sub-path. This matches the
+        // layout convention used by Phalcon's own `.zep` source tree (e.g.
+        // `phalcon/Di/InitializationAwareInterface.zep` - lowercase `phalcon/`
+        // root, PascalCase sub-namespaces matching the `namespace`/`class`
+        // declarations), which neither the exact-FQN nor fully-lowercased
+        // candidate above can match on a case-sensitive filesystem.
+        $segments = explode(DIRECTORY_SEPARATOR, $relativePath);
+        if (\count($segments) > 1) {
+            $root = strtolower(array_shift($segments));
+            $hybrid = $root . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $segments);
+            if (!\in_array($hybrid, $candidates, true)) {
+                $candidates[] = $hybrid;
+            }
+        }
+
         foreach ($candidates as $candidate) {
             $filePath = $location . DIRECTORY_SEPARATOR . $candidate . '.zep';
             if (file_exists($filePath)) {
