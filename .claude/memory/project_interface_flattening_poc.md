@@ -117,12 +117,28 @@ branch in both Mode A (`php-psr` loaded) and Mode B (Composer-only,
   - Mode B: `zend_class_implements(poc_loggerdirect_ce, 1,
     zephir_get_internal_ce(SL("psr\\log\\loggerinterface")))` — same pattern,
     but the CE has no C-extension backing.
-- **Runtime in Mode B: loading the compiled `.so` segfaults.**
-  `zephir_get_internal_ce()` returns `NULL` (no CE registered — nothing in
-  that runtime loads `Psr\Log\LoggerInterface`), and `zend_class_implements()`
-  dereferences it — crashing the whole PHP process at `MINIT`
-  (`php -m`, `php -r '...'`, anything that loads the extension). Reproduced
-  directly: `Segmentation fault (core dumped)`.
+- **Runtime in Mode B: loading the compiled `.so` segfaults.** Reproduced
+  directly: `Segmentation fault (core dumped)` on `php -m` / `php -r '...'` /
+  anything that loads the extension and triggers `MINIT`.
+
+  **Root cause is subtler than "no NULL guard"** (a follow-up feasibility
+  agent dug into this — see below): `zephir_get_internal_ce()`
+  (`kernel/main.c:368-378`, byte-identical on `master` and this branch since
+  2015's `5e613a8c`) ALREADY guards against a missing CE:
+  ```c
+  if ((temp_ce = zend_hash_str_find_ptr(CG(class_table), class_name, class_name_len)) == NULL) {
+      zend_error(E_ERROR, "Class '%s' not found", class_name);
+      return NULL;
+  }
+  ```
+  `zend_error(E_ERROR, ...)` is supposed to `zend_bailout()` (longjmp) into a
+  clean fatal-error abort — `zend_class_implements()` should never receive the
+  `NULL`. The segfault we observe therefore most likely happens *inside*
+  `zend_error(E_ERROR, ...)` itself: at `MINIT` time, the bailout jmpbuf /
+  executor context it longjmps to may not yet be established for this SAPI —
+  so the "guard" crashes before it can produce its clean fatal error. In other
+  words: **the safety net exists, but the net itself isn't safe to use this
+  early in the module lifecycle.**
 
 **Confirmed pre-existing, not introduced by this fix**: the
 `getImplementedInterfaces()` loop's `class`-handling branch is **byte-identical**
@@ -167,12 +183,41 @@ distributable extension).
 Verdict: Gap A is confirmed pre-existing (not a regression), but manifests as
 a segfault rather than the graceful warning the user expected — worth knowing,
 not worth blocking this POC on. Gap B is accepted as inherent/expected by the
-user. **Possible future mitigation for both** (not implemented, just floated):
-guard `zend_class_implements()`/`zephir_get_internal_ce()` call sites with a
-NULL check that raises a catchable PHP `RuntimeException` instead of
-segfaulting — this would fix Gap A's crash and turn Gap B's failure mode from
-"crash" into "catchable error," in both the new flatten path and the
-decades-old `class ... implements`/`extends` CE-reference paths alike.
+user.
+
+**Follow-up feasibility check (lightweight, read-only — user explicitly said
+"don't spend too much effort, out of scope for this POC"):** dispatched a
+scout to assess whether Zephir could raise a catchable PHP `RuntimeException`
+instead of segfaulting. Findings:
+- A NULL guard already exists in `zephir_get_internal_ce()` (`zend_error
+  (E_ERROR, "Class '%s' not found", ...)`) — see the corrected root-cause
+  analysis above; the segfault is most likely the guard's own `zend_error`
+  call crashing at `MINIT` (no bailout context yet), not a missing check.
+- **A true catchable PHP-level exception is NOT feasible at `MINIT`** —
+  `zend_throw_exception` needs an active execution context
+  (`EG(current_execute_data)`, exception machinery) that doesn't exist during
+  module initialization. This is the hard technical ceiling on the user's
+  "PHP level Runtime Exception" idea — it can't be done at the point where
+  `zend_class_implements()` runs.
+- The achievable improvement is narrower: harden the *existing*
+  `zend_error(E_ERROR)` guard in `zephir_get_internal_ce` (`kernel/main.c`)
+  into a **guaranteed-clean fatal abort** with a clearer message ("Class 'X'
+  not found - is the providing extension loaded?"). A `kernel/`-level fix
+  would benefit every already-compiled extension linking against the shared
+  runtime, with no recompilation — better leverage than a codegen
+  (`Definition.php`) change, which only helps newly-compiled code.
+- Prior art exists for runtime (not MINIT) exception throwing:
+  `kernel/exception.c`'s `zephir_throw_exception_string`/`_format` wrap
+  `zend_throw_exception_object` — usable in compiled method bodies, not
+  module bootstrap.
+
+**Recommendation** (scout's, concurred): worth a small future patch to make
+`zephir_get_internal_ce`'s existing `zend_error(E_ERROR)` path abort cleanly
+instead of crashing — but a catchable-`RuntimeException` fix is off the table
+at `MINIT` and shouldn't be pursued. This closes the loop on the user's
+"could it throw a Runtime Exception?" question for both Gap A and Gap B:
+the honest answer is "not at this point in the lifecycle — the best
+achievable fix is a clean fatal, not a catchable exception."
 
 **Why:** PSR interfaces are the canonical case — they exist both as the
 `php-psr` C extension and the `psr/log` Composer package, and a `.so`
