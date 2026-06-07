@@ -233,3 +233,73 @@ interface's CE is safe to reference directly* — the answer is
 `ReflectionClass::isInternal()`, not a namespace/extension-name heuristic, and
 not `isBundledInterface()`/`interface_exists()` alone (not yet merged to
 `master` as of 2026-06-07).
+
+### The Third Gap, the case-sensitivity bug, and a debunked "upgrade landmine" theory
+
+A deeper investigation (triggered by the user noting `phalcon-shared` has the
+exact "interface extends external-dependency interface" scenario — e.g.
+`TwistersFury\Phalcon\Shared\Di\Interfaces\InitializationAware extends
+Phalcon\Di\InitializationAwareInterface` with `"external-dependencies":
+{"Phalcon": "/opt/cphalcon"}` — yet has *never* hit the third gap) surfaced a
+**separate, pre-existing bug that masks the third gap in all real-world
+Phalcon-convention projects**:
+
+`Compiler::loadExternalClass()` (pre-0.23.0) computed the `.zep` path via
+`strtolower(str_replace('\\', DIRECTORY_SEPARATOR, $className))` — fully
+lowercasing the FQN. Real Phalcon `.zep` trees use a **hybrid casing
+convention**: lowercase top-level namespace directory + PascalCase sub-paths
+(`/opt/cphalcon/phalcon/Di/InitializationAwareInterface.zep`). The
+all-lowercase computed path (`phalcon/di/initializationawareinterface.zep`)
+never matches on a case-sensitive filesystem → `file_exists()` → `false` →
+`loadExternalClass()` silently returns `false` → `isInterface()` returns
+`false` → silent fallthrough to the working reflection-based path
+(`zend_class_implements(..., zephir_get_internal_ce(SL("phalcon\\di\\...")))`).
+**`external-dependencies` has effectively never engaged for any Phalcon
+sub-namespaced class in `phalcon-shared`, on any version** — confirmed via
+direct extraction of generated C from the live
+`twistersfury/phalcon-shared:8.3-development` image.
+
+This bug WAS independently identified and fixed upstream — commit `37281e08d`
+"Add case check for external dependency classes" (PR #2556, merged via
+`317ec27e4`, **shipped in Zephir 0.23.0**) replaced the naive lowercasing with
+`locateExternalClassFile()`, which tries two candidates: the FQN's exact
+casing, or fully lowercased.
+
+**Hypothesis formed (later disproven): an "upgrade landmine".** Reasoning:
+if 0.23.0's case-fix made `external-dependencies` finally engage for
+`Phalcon\Di\InitializationAwareInterface`, that would route
+`InitializationAware.zep` through `generateClassHeadersPost()` — whose
+`'class' === $classDefinition->getType()` guard (confirmed still present,
+byte-identical, at the `0.23.0` tag) never emits `#include`/`extern` for
+`interface` definitions — causing a brand-new "use of undeclared identifier"
+**C compile failure** that is impossible today, the moment `phalcon-shared`
+upgrades its Zephir toolchain.
+
+**Empirically tested and DISPROVEN** (2026-06-07): upgraded a live clone of
+`twistersfury/phalcon-shared:8.3-development` to Zephir 0.23.0
+(`composer require phalcon/zephir:0.23.0`), ran `zephir fullclean && zephir
+generate --export-classes && make` against the real `/opt/cphalcon` sources.
+**Build succeeded (exit 0)**, extension loaded, `instanceof
+Phalcon\Di\InitializationAwareInterface` still `true`. Generated C was
+*unchanged* — still `zend_class_implements(...,
+zephir_get_internal_ce(SL("phalcon\\di\\initializationawareinterface")))`.
+
+**Root cause of why the landmine theory failed**: `locateExternalClassFile()`
+in 0.23.0 only tries **two** casings — the FQN exactly as written
+(`Phalcon/Di/InitializationAwareInterface`) or fully lowercased
+(`phalcon/di/initializationawareinterface`). Neither matches Phalcon's actual
+**third, hybrid casing** (`phalcon/Di/InitializationAwareInterface` — lowercase
+root + PascalCase sub-path). PR #2556's fix targets a different layout
+convention (e.g. PSR-4 projects whose directory casing matches their namespace
+1:1, or projects using full-lowercase paths) and does not cover Phalcon's
+actual repo layout.
+
+**Conclusion**: there is no upgrade landmine. `external-dependencies` remains
+permanently dormant for `Phalcon\*` classes in `phalcon-shared` — at 0.21.0
+*and* 0.23.0+ — so the third gap (`generateClassHeadersPost`'s `class`-only
+include guard) stays silently masked indefinitely under real-world Phalcon
+casing conventions, regardless of the case-sensitivity fix. It remains a real,
+fixable upstream defect (worth a small PR extending the guard to cover
+`'interface'` too, and arguably `locateExternalClassFile` could try a third
+"lowercase-root-only" candidate) — but it is *not* an active risk for anyone
+upgrading Zephir today.
