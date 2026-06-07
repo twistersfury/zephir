@@ -206,6 +206,29 @@ final class CompilerFile implements FileInterface
 
         $interfaceDefinitions = [];
         foreach ($classDefinition->getImplementedInterfaces() as $interface) {
+            if (false !== getenv('ZEPHIR_PROBE_AUTOLOAD')) {
+                $loaders = [];
+                foreach (spl_autoload_functions() ?: [] as $fn) {
+                    if (is_array($fn)) {
+                        $loaders[] = (is_object($fn[0]) ? get_class($fn[0]) : $fn[0]) . '::' . $fn[1];
+                    } elseif (is_object($fn)) {
+                        $loaders[] = get_class($fn);
+                    } else {
+                        $loaders[] = (string) $fn;
+                    }
+                }
+
+                throw new \RuntimeException(sprintf(
+                    "ZEPHIR_PROBE: interface=%s\n  isInterface()=%s\n  isBundledInterface()=%s\n  interface_exists(no-autoload)=%s\n  interface_exists(WITH-autoload)=%s\n  registered autoloaders=%s",
+                    $interface,
+                    var_export($compiler->isInterface($interface), true),
+                    var_export($compiler->isBundledInterface($interface), true),
+                    var_export(interface_exists($interface, false), true),
+                    var_export(interface_exists($interface, true), true),
+                    implode(' | ', $loaders)
+                ));
+            }
+
             if ($compiler->isInterface($interface)) {
                 $interfaceDefinitions[$interface] = $compiler->getClassDefinition($interface);
             } else {
