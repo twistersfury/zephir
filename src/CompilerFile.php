@@ -218,13 +218,27 @@ final class CompilerFile implements FileInterface
                     }
                 }
 
+                $isInternal = null;
+                $extensionName = null;
+                $reflectionError = null;
+                try {
+                    $probeReflection = new ReflectionClass(ltrim($interface, '\\'));
+                    $isInternal = $probeReflection->isInternal();
+                    $extensionName = $probeReflection->getExtensionName();
+                } catch (\ReflectionException $probeException) {
+                    $reflectionError = $probeException->getMessage();
+                }
+
                 throw new \RuntimeException(sprintf(
-                    "ZEPHIR_PROBE: interface=%s\n  isInterface()=%s\n  isBundledInterface()=%s\n  interface_exists(no-autoload)=%s\n  interface_exists(WITH-autoload)=%s\n  registered autoloaders=%s",
+                    "ZEPHIR_PROBE: interface=%s\n  isInterface()=%s\n  isBundledInterface()=%s\n  interface_exists(no-autoload)=%s\n  interface_exists(WITH-autoload)=%s\n  isInternal()=%s\n  getExtensionName()=%s\n  reflectionError=%s\n  registered autoloaders=%s",
                     $interface,
                     var_export($compiler->isInterface($interface), true),
                     var_export($compiler->isBundledInterface($interface), true),
                     var_export(interface_exists($interface, false), true),
                     var_export(interface_exists($interface, true), true),
+                    var_export($isInternal, true),
+                    var_export($extensionName, true),
+                    var_export($reflectionError, true),
                     implode(' | ', $loaders)
                 ));
             }
