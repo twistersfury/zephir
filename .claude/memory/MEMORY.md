@@ -1,0 +1,2 @@
+- [Interface flattening POC branch](project_interface_flattening_poc.md) — poc/interface-flattening fix + the parameter-fidelity gap fix (bb9a4f34b)
+- [Zephir interface POC repo reference](reference_zephir_interface_poc.md) — public GitLab repo verifying the flattening fix in two Docker modes
