@@ -103,6 +103,14 @@ final class Definition extends AbstractDefinition
      */
     protected array $interfaces = [];
 
+    /**
+     * FQNs of parent interfaces whose methods are inlined into this interface
+     * because their CE is not available (not in external-dependencies).
+     *
+     * @var string[]
+     */
+    protected array $flattenParentInterfaces = [];
+
     protected bool $isBundled = false;
 
     /**
@@ -503,6 +511,10 @@ final class Definition extends AbstractDefinition
          */
         $codePrinter->outputBlankLine(true);
         foreach ($this->interfaces as $interface) {
+            if ($this->isInterface() && in_array($interface, $this->flattenParentInterfaces, true)) {
+                continue;
+            }
+
             /**
              * Try to find the interface.
              */
@@ -922,6 +934,16 @@ final class Definition extends AbstractDefinition
     public function getImplementedInterfaces(): array
     {
         return $this->interfaces;
+    }
+
+    public function getFlattenParentInterfaces(): array
+    {
+        return $this->flattenParentInterfaces;
+    }
+
+    public function addFlattenParentInterface(string $fqn): void
+    {
+        $this->flattenParentInterfaces[] = $fqn;
     }
 
     /**

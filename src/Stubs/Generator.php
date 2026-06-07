@@ -24,7 +24,11 @@ use Zephir\Exception;
 
 use function addslashes;
 use function array_diff;
+use function array_filter;
 use function array_key_exists;
+use function array_map;
+use function array_values;
+use function ltrim;
 use function file_put_contents;
 use function implode;
 use function in_array;
@@ -164,6 +168,14 @@ class Generator
         }
 
         if ($interfaces = $class->getImplementedInterfaces()) {
+            if (Definition::TYPE_INTERFACE === $class->getType()) {
+                $flattened  = array_map(static fn ($f) => ltrim($f, '\\'), $class->getFlattenParentInterfaces());
+                $interfaces = array_values(array_filter(
+                    $interfaces,
+                    static fn ($i) => !in_array(ltrim($i, '\\'), $flattened, true)
+                ));
+            }
+
             foreach ($interfaces as $key => $interface) {
                 $interfaces[$key] = '\\' . trim($interface, '\\');
 
@@ -172,8 +184,10 @@ class Generator
                 }
             }
 
-            $keyword = Definition::TYPE_INTERFACE === $class->getType() ? ' extends ' : ' implements ';
-            $source  .= $keyword . implode(', ', $interfaces);
+            if (!empty($interfaces)) {
+                $keyword = Definition::TYPE_INTERFACE === $class->getType() ? ' extends ' : ' implements ';
+                $source  .= $keyword . implode(', ', $interfaces);
+            }
         }
 
         $source .= PHP_EOL . '{' . PHP_EOL;

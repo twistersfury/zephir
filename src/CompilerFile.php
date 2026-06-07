@@ -15,6 +15,7 @@ namespace Zephir;
 
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
+use ReflectionClass;
 use ReflectionException;
 use Zephir\Class\Constant;
 use Zephir\Class\Definition\Definition;
@@ -33,6 +34,9 @@ use Zephir\Traits\CompilerTrait;
 
 use function array_map;
 use function count;
+use function in_array;
+use function ltrim;
+use function strpos;
 use function explode;
 use function file_exists;
 use function file_put_contents;
@@ -202,7 +206,26 @@ final class CompilerFile implements FileInterface
                 $interfaceDefinitions[$interface] = $compiler->getClassDefinition($interface);
             } else {
                 if ($compiler->isBundledInterface($interface)) {
-                    $interfaceDefinitions[$interface] = $compiler->getInternalClassDefinition($interface);
+                    $parentDef = $compiler->getInternalClassDefinition($interface);
+
+                    if ($classDefinition->isInterface() && self::shouldFlattenInterface($interface)) {
+                        $classDefinition->addFlattenParentInterface($interface);
+                        foreach ($parentDef->getMethods() as $method) {
+                            if (!$classDefinition->hasMethod($method->getName())) {
+                                $childMethod = new Method(
+                                    $classDefinition,
+                                    [],
+                                    $method->getName(),
+                                    $method->getParameters()
+                                );
+                                $childMethod->setIsStatic($method->isStatic());
+                                $childMethod->setIsBundled(true);
+                                $classDefinition->addMethod($childMethod, []);
+                            }
+                        }
+                    } else {
+                        $interfaceDefinitions[$interface] = $parentDef;
+                    }
                 } else {
                     if ($extendedClass !== null) {
                         $classDefinition->setExtendsClassDefinition(new DefinitionRuntime($extendedClass));
@@ -223,6 +246,34 @@ final class CompilerFile implements FileInterface
         if (count($interfaceDefinitions) > 0) {
             $classDefinition->setImplementedInterfaceDefinitions($interfaceDefinitions);
         }
+    }
+
+    /**
+     * Returns true when a bundled interface (available via isBundledInterface) should have its
+     * methods inlined into the child interface rather than emitting a zend_class_implements() call.
+     *
+     * PHP core interfaces (no namespace) are always present and must NOT be flattened.
+     * Namespaced interfaces from optional extensions (e.g. Psr\Log\LoggerInterface) should be
+     * flattened when they are not declared in external-dependencies.
+     */
+    private static function shouldFlattenInterface(string $fqn): bool
+    {
+        $fqn = ltrim($fqn, '\\');
+
+        if (strpos($fqn, '\\') === false) {
+            return false;
+        }
+
+        try {
+            $ext = (new ReflectionClass($fqn))->getExtensionName();
+            if (false !== $ext && in_array($ext, ['Core', 'standard', 'SPL', 'date', 'pcre', 'json', 'Reflection'], true)) {
+                return false;
+            }
+        } catch (ReflectionException $e) {
+            // Cannot reflect — treat as flatten candidate
+        }
+
+        return true;
     }
 
     /**
