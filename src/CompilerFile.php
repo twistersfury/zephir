@@ -206,43 +206,6 @@ final class CompilerFile implements FileInterface
 
         $interfaceDefinitions = [];
         foreach ($classDefinition->getImplementedInterfaces() as $interface) {
-            if (false !== getenv('ZEPHIR_PROBE_AUTOLOAD')) {
-                $loaders = [];
-                foreach (spl_autoload_functions() ?: [] as $fn) {
-                    if (is_array($fn)) {
-                        $loaders[] = (is_object($fn[0]) ? get_class($fn[0]) : $fn[0]) . '::' . $fn[1];
-                    } elseif (is_object($fn)) {
-                        $loaders[] = get_class($fn);
-                    } else {
-                        $loaders[] = (string) $fn;
-                    }
-                }
-
-                $isInternal = null;
-                $extensionName = null;
-                $reflectionError = null;
-                try {
-                    $probeReflection = new ReflectionClass(ltrim($interface, '\\'));
-                    $isInternal = $probeReflection->isInternal();
-                    $extensionName = $probeReflection->getExtensionName();
-                } catch (\ReflectionException $probeException) {
-                    $reflectionError = $probeException->getMessage();
-                }
-
-                throw new \RuntimeException(sprintf(
-                    "ZEPHIR_PROBE: interface=%s\n  isInterface()=%s\n  isBundledInterface()=%s\n  interface_exists(no-autoload)=%s\n  interface_exists(WITH-autoload)=%s\n  isInternal()=%s\n  getExtensionName()=%s\n  reflectionError=%s\n  registered autoloaders=%s",
-                    $interface,
-                    var_export($compiler->isInterface($interface), true),
-                    var_export($compiler->isBundledInterface($interface), true),
-                    var_export(interface_exists($interface, false), true),
-                    var_export(interface_exists($interface, true), true),
-                    var_export($isInternal, true),
-                    var_export($extensionName, true),
-                    var_export($reflectionError, true),
-                    implode(' | ', $loaders)
-                ));
-            }
-
             if ($compiler->isInterface($interface)) {
                 $interfaceDefinitions[$interface] = $compiler->getClassDefinition($interface);
             } else {
@@ -296,28 +259,22 @@ final class CompilerFile implements FileInterface
      * Returns true when a bundled interface (available via isBundledInterface) should have its
      * methods inlined into the child interface rather than emitting a zend_class_implements() call.
      *
-     * PHP core interfaces (no namespace) are always present and must NOT be flattened.
-     * Namespaced interfaces from optional extensions (e.g. Psr\Log\LoggerInterface) should be
-     * flattened when they are not declared in external-dependencies.
+     * A class entry backed by a C extension (including PHP's own core/SPL/etc. interfaces,
+     * which are themselves compiled into core extensions) is guaranteed to be present at
+     * runtime, so the zend_class_implements() reference is safe to keep. An interface that
+     * is only declared via userland PHP sources (e.g. loaded through Composer's autoloader,
+     * with no backing C extension) has no such guarantee — its methods must be flattened
+     * into the child interface instead.
      */
     private static function shouldFlattenInterface(string $fqn): bool
     {
-        $fqn = ltrim($fqn, '\\');
-
-        if (strpos($fqn, '\\') === false) {
+        try {
+            $reflection = new ReflectionClass(ltrim($fqn, '\\'));
+        } catch (ReflectionException $e) {
             return false;
         }
 
-        try {
-            $ext = (new ReflectionClass($fqn))->getExtensionName();
-            if (false !== $ext && in_array($ext, ['Core', 'standard', 'SPL', 'date', 'pcre', 'json', 'Reflection'], true)) {
-                return false;
-            }
-        } catch (ReflectionException $e) {
-            // Cannot reflect — treat as flatten candidate
-        }
-
-        return true;
+        return !$reflection->isInternal();
     }
 
     /**
