@@ -17,6 +17,9 @@ use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
 use ReflectionClass;
 use ReflectionException;
+use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionParameter;
 use Zephir\Class\Constant;
 use Zephir\Class\Definition\Definition;
 use Zephir\Class\Definition\DefinitionRuntime;
@@ -31,6 +34,7 @@ use Zephir\Exception\IllegalStateException;
 use Zephir\Exception\ParseException;
 use Zephir\FileSystem\FileSystemInterface;
 use Zephir\Traits\CompilerTrait;
+use Zephir\Types\Types;
 
 use function array_map;
 use function count;
@@ -210,13 +214,16 @@ final class CompilerFile implements FileInterface
 
                     if ($classDefinition->isInterface() && self::shouldFlattenInterface($interface)) {
                         $classDefinition->addFlattenParentInterface($interface);
+                        $reflectionInterface = new ReflectionClass(ltrim($interface, '\\'));
                         foreach ($parentDef->getMethods() as $method) {
                             if (!$classDefinition->hasMethod($method->getName())) {
                                 $childMethod = new Method(
                                     $classDefinition,
                                     [],
                                     $method->getName(),
-                                    $method->getParameters()
+                                    new Parameters(self::buildFlattenedParameters(
+                                        $reflectionInterface->getMethod($method->getName())
+                                    ))
                                 );
                                 $childMethod->setIsStatic($method->isStatic());
                                 $childMethod->setIsBundled(true);
@@ -274,6 +281,79 @@ final class CompilerFile implements FileInterface
         }
 
         return true;
+    }
+
+    /**
+     * Builds Zephir-compatible parameter definitions for a flattened (reflected) method,
+     * preserving the parent interface's parameter type hints and default values so the
+     * generated arg-info stays LSP-compatible with implementations written against it.
+     */
+    private static function buildFlattenedParameters(ReflectionMethod $method): array
+    {
+        $parameters = [];
+
+        foreach ($method->getParameters() as $reflectionParameter) {
+            $parameters[] = self::buildFlattenedParameter($reflectionParameter);
+        }
+
+        return $parameters;
+    }
+
+    private static function buildFlattenedParameter(ReflectionParameter $parameter): array
+    {
+        $info = [
+            'type'      => 'parameter',
+            'name'      => $parameter->getName(),
+            'const'     => 0,
+            'data-type' => Types::T_VARIABLE,
+            'mandatory' => !$parameter->isOptional(),
+        ];
+
+        $type = $parameter->getType();
+        if ($type instanceof ReflectionNamedType) {
+            if ($type->isBuiltin()) {
+                $info['data-type'] = match ($type->getName()) {
+                    'array'    => Types::T_ARRAY,
+                    'bool'     => Types::T_BOOLEAN,
+                    'int'      => Types::T_INT,
+                    'float'    => Types::T_DOUBLE,
+                    'string'   => Types::T_STRING,
+                    'callable' => Types::T_CALLABLE,
+                    default    => Types::T_VARIABLE,
+                };
+            } else {
+                $info['cast'] = ['type' => 'variable', 'value' => ltrim($type->getName(), '\\')];
+            }
+        }
+
+        if (!$info['mandatory']) {
+            $info['default'] = self::buildFlattenedParameterDefault($parameter);
+        }
+
+        return $info;
+    }
+
+    private static function buildFlattenedParameterDefault(ReflectionParameter $parameter): array
+    {
+        if (!$parameter->isDefaultValueAvailable()) {
+            return ['type' => 'null'];
+        }
+
+        try {
+            $value = $parameter->getDefaultValue();
+        } catch (ReflectionException $e) {
+            return ['type' => 'null'];
+        }
+
+        return match (true) {
+            null === $value   => ['type' => 'null'],
+            is_array($value)  => ['type' => 'empty-array'],
+            is_bool($value)   => ['type' => 'bool', 'value' => $value ? 'true' : 'false'],
+            is_int($value)    => ['type' => 'int', 'value' => (string)$value],
+            is_float($value)  => ['type' => 'double', 'value' => (string)$value],
+            is_string($value) => ['type' => 'string', 'value' => $value],
+            default           => ['type' => 'null'],
+        };
     }
 
     /**
