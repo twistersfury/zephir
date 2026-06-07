@@ -303,3 +303,92 @@ fixable upstream defect (worth a small PR extending the guard to cover
 `'interface'` too, and arguably `locateExternalClassFile` could try a third
 "lowercase-root-only" candidate) — but it is *not* an active risk for anyone
 upgrading Zephir today.
+
+### The third gap, fully unmasked: empirical proof via a hybrid-casing patch, plus a SECOND shielded defect
+
+Since the casing bug is the *only* thing keeping the third gap dormant, the
+natural follow-up was: patch the casing bug in isolation (a minimal third
+candidate in `locateExternalClassFile()` — lowercase only the root namespace
+segment, preserve the rest) on a branch (`fix/external-class-hybrid-casing`,
+commit `6c71eb8ac`, based on `upstream/development` @ 0.23.0) and re-run
+`phalcon-shared`'s build against it. This *should* make `external-dependencies`
+finally engage for `Phalcon\*` and surface the third gap directly.
+
+**It does — but a SECOND, more pervasive shielded defect fires first and
+must be worked around to even reach the third gap:**
+
+**Shielded defect #2 — the casing bug also suppresses strict static
+property-validation (`classDoesNotHaveProperty`).**
+`Expression\PropertyAccess::compile()` (`src/Expression/PropertyAccess.php:117`)
+gates `checkClassHasProperty()` (`Traits\VariablesTrait.php:51-65`,
+`CompilerException::classDoesNotHaveProperty`) behind
+`$compiler->isClass($classType)`. Before the casing fix, `isClass()`
+(`Compiler.php:1444`) returns `false` for `Phalcon\*` (same casing-mismatch
+root cause as the third gap), so the strict check is silently skipped — letting
+`phalcon-shared`'s pervasive use of Phalcon's magic/dynamic property access
+(`config->listeners`, `config->logger->{adapter}`, etc. — populated via
+`__get`/collection magic at runtime, never formally declared on the `.zep`
+interfaces) compile unchecked. The instant the casing fix makes `isClass()`
+succeed, `getClassDefinition()` returns a real reflected `Definition`, the
+strict check fires, and **dozens of `classDoesNotHaveProperty` compile-time
+crashes cascade across idiomatic, working, production Phalcon usage** —
+`Kernel.zep`, `Logger.zep`, `Url.zep`, etc. **A complete casing fix would
+immediately and totally break `phalcon-shared` compilation through this
+cascade — not through the third gap — long before the third gap's C-compile
+error could ever surface in a real build.**
+
+To get past this cascade and reach the third gap anyway (in a disposable test
+container, source patched in-place — not the user's real repo), each crash
+site was rewritten to use Zephir's *dynamic* property-access AST node
+(`'property-string-access'`/`'property-dynamic-access'` →
+`PropertyDynamicAccess`, which never calls `checkClassHasProperty` —
+confirmed by reading its full ~159-line source). The reliable bypass is to
+assign the property name to a local variable first and access via
+`->{variableName}` (unambiguously parsed as `Types::T_VARIABLE`); the more
+obvious `->{"literalString"}` form is **inconsistent** — it suppressed the
+error for some properties (`listeners`, `event`, `listener`, `session`) but
+not others (`system` recurred verbatim), for reasons not fully resolved
+(possibly literal-string braces get re-normalized to `property-access` nodes
+in some contexts). `let key = "system"; ... ->{key}` worked every time.
+
+**Once patched through (≈14 sites across `Kernel.zep`, `Logger.zep`,
+`Url.zep`), `zephir generate --export-classes` succeeded cleanly — and `zephir
+compile` then failed with EXACTLY the predicted third-gap error**, confirming
+the theoretical chain end-to-end:
+
+```
+ext/twistersfury/phalcon/shared/di/interfaces/initializationaware.zep.c:19:93: error:
+'phalcon_di_initializationawareinterface_ce' undeclared (first use in this function)
+   zend_class_implements(twistersfury_phalcon_shared_di_interfaces_initializationaware_ce,
+                         1, phalcon_di_initializationawareinterface_ce);
+```
+
+Confirmed via direct inspection of the generated tree:
+- `phalcon_di_initializationawareinterface_ce` is referenced as a **direct,
+  unresolved C symbol** (no `extern`, no `zephir_get_internal_ce` runtime
+  lookup) in **5 separate generated `.c` files**
+  (`InitializationAware`, `Authorization` ×2, `Captcha` ×2) — all unresolvable
+  at compile time.
+- **No header anywhere** declares it `extern` —
+  `generateClassHeadersPost()`'s `'class'`-only guard (the actual third-gap
+  defect) means `external-dependencies` never emits the needed forward
+  declaration for an `interface`'s external parent.
+- `ext/phalcon/phalcon/di/` doesn't even exist in the generated `ext/` tree —
+  `external-dependencies` expects the symbol to come from the *running*
+  Phalcon extension at link/load time, with no compile-time forward
+  declaration to satisfy the C compiler.
+- A related symptom appeared in `abstractserviceprovider.zep.c`: `fatal error:
+  ext/phalcon/phalcon/di/abstractinjectionaware.zep.h: No such file or
+  directory` on an `#include` — same missing-header root cause, manifesting as
+  a missing file rather than an undeclared symbol.
+
+**This is the closing link in the chain**: the casing bug isn't just masking
+one dormant defect — it's a load-bearing shield over (at least) two
+independent, serious compile-time defects that would otherwise make
+`external-dependencies` unusable for any Phalcon-extension project using
+idiomatic Phalcon magic-property patterns. Fixing the casing bug in isolation,
+without ALSO (a) relaxing/extending static property validation to tolerate
+runtime-magic properties on reflected external classes, AND (b) fixing
+`generateClassHeadersPost()`'s `class`-only include/extern guard to also cover
+`interface`, would turn a currently-working build into a completely
+uncompilable one.
